@@ -152,7 +152,7 @@ void display_utxo_ledger() {
         }
         curr = curr->next;
     }
-    if(items == 0) printf("[System]: No Active UTXOs currently exist.\n");
+    if(items == 0) printf("System: No Active UTXOs currently exist.\n");
 }
 
 // UTXO transfer handler
@@ -162,7 +162,7 @@ int process_utxo_transfer(const char* sender_id, const char* recipient_id, int a
     UTXO* curr = utxo_head;
 
     if (calculate_utxo_balance(sender_id) < required) {
-        printf("[REJECTED]: Insufficient UTXO balance. Need %d\n", required);
+        printf("REJECTED: Insufficient UTXO balance. Need %d\n", required);
         return 0;
     }
 
@@ -194,7 +194,7 @@ int process_utxo_transfer(const char* sender_id, const char* recipient_id, int a
             change_utxo->is_spent = 0;
             change_utxo->next = utxo_head;
             utxo_head = change_utxo;
-            printf("[UTXO SYSTEM]: Generated change output of %d Coins back to %s\n", change, sender_id);
+            printf("UTXO SYSTEM: Generated change output of %d Coins back to %s\n", change, sender_id);
         }
     }
     return 1;
