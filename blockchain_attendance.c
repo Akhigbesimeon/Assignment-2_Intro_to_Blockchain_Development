@@ -14,18 +14,18 @@ void compute_mock_hash(const char* input, char* output) {
     while ((c = (unsigned char)*input++)) {
         hash = ((hash << 5) + hash) + c;
     }
-    sprintf(output, "00000000000000000000000000000000000000000000000000000000%08lx", hash);
+    sprintf(output, 65, "00000000000000000000000000000000000000000000000000000000%08lx", hash);
 }
 
 void generate_tx_hash(int index, const char* student_id, int reward, char* output) {
-    char buffer[256];
-    sprintf(buffer, "TX:%d-%s-%d-%ld", index, student_id, reward, (long)time(NULL));
+    char buffer[512]; 
+    snprintf(buffer, sizeof(buffer), "TX:%d-%s-%d-%ld", index, student_id, reward, (long)time(NULL));
     compute_mock_hash(buffer, output);
 }
 
 void generate_block_hash(Block* b, char* output) {
-    char buffer[512];
-    sprintf(buffer, "%d-%ld-%s-%d-%d-%s-%s-%d", 
+    char buffer[1024]; 
+    snprintf(buffer, sizeof(buffer), "%d-%ld-%s-%d-%d-%s-%s-%d", 
             b->index, b->timestamp, b->student_id, (int)b->status, 
             b->token_reward, b->tx_id, b->prev_hash, b->nonce);
     compute_mock_hash(buffer, output);
@@ -68,10 +68,15 @@ void mark_attendance(const char* student_id, AttendanceStatus status) {
     int reward = (status == PRESENT) ? REWARD_PRESENT : ((status == LATE) ? REWARD_LATE : REWARD_ABSENT);
     
     Block* new_block = (Block*)malloc(sizeof(Block));
+    if (new_block == NULL) return;
+
     new_block->index = (blockchain_head == NULL) ? 1 : blockchain_head->index + 1;
     new_block->timestamp = (long)time(NULL);
-    strcpy(new_block->student_id, student_id);
-    strcpy(new_block->student_name, student_registry[found].student_name);
+    
+    // Use snprintf instead of raw strcpy for safety
+    snprintf(new_block->student_id, sizeof(new_block->student_id), "%s", student_id);
+    snprintf(new_block->student_name, sizeof(new_block->student_name), "%s", student_registry[found].student_name);
+    
     new_block->status = status;
     new_block->token_reward = reward;
     new_block->nonce = 0;
@@ -80,13 +85,13 @@ void mark_attendance(const char* student_id, AttendanceStatus status) {
     if(reward > 0) {
         generate_tx_hash(new_block->index, student_id, reward, new_block->tx_id);
     } else {
-        strcpy(new_block->tx_id, "0000000000000000000000000000000000000000000000000000000000000000"); 
+        snprintf(new_block->tx_id, sizeof(new_block->tx_id), "0000000000000000000000000000000000000000000000000000000000000000");
     }
 
     if(blockchain_head == NULL) {
-        strcpy(new_block->prev_hash, "0000000000000000000000000000000000000000000000000000000000000000");
+        snprintf(new_block->prev_hash, sizeof(new_block->prev_hash), "0000000000000000000000000000000000000000000000000000000000000000");
     } else {
-        strcpy(new_block->prev_hash, blockchain_head->hash);
+        snprintf(new_block->prev_hash, sizeof(new_block->prev_hash), "%s", blockchain_head->hash);
     }
 
     // Append to pending pool list
@@ -106,8 +111,9 @@ void process_ledger_updates(Block* b) {
 
     if(active_model == MODEL_UTXO) {
         UTXO* new_utxo = (UTXO*)malloc(sizeof(UTXO));
-        strcpy(new_utxo->utxo_id, b->tx_id);
-        strcpy(new_utxo->owner_id, b->student_id);
+        if (new_utxo == NULL) return;
+        snprintf(new_utxo->utxo_id, sizeof(new_utxo->utxo_id), "%s", b->tx_id);
+        snprintf(new_utxo->owner_id, sizeof(new_utxo->owner_id), "%s", b->student_id);
         new_utxo->amount = b->token_reward;
         new_utxo->is_spent = 0;
         new_utxo->next = utxo_head;
@@ -146,7 +152,7 @@ void display_utxo_ledger() {
         }
         curr = curr->next;
     }
-    if(items == 0) printf("System: No Active UTXOs currently exist.\n");
+    if(items == 0) printf("[System]: No Active UTXOs currently exist.\n");
 }
 
 // UTXO transfer handler
@@ -156,7 +162,7 @@ int process_utxo_transfer(const char* sender_id, const char* recipient_id, int a
     UTXO* curr = utxo_head;
 
     if (calculate_utxo_balance(sender_id) < required) {
-        printf("REJECTED: Insufficient UTXO balance. Need %d\n", required);
+        printf("[REJECTED]: Insufficient UTXO balance. Need %d\n", required);
         return 0;
     }
 
@@ -170,8 +176,9 @@ int process_utxo_transfer(const char* sender_id, const char* recipient_id, int a
     }
 
     UTXO* rx_utxo = (UTXO*)malloc(sizeof(UTXO));
-    sprintf(rx_utxo->utxo_id, "TX-TRANSFER-%ld", (long)time(NULL));
-    strcpy(rx_utxo->owner_id, recipient_id);
+    if (rx_utxo == NULL) return 0;
+    snprintf(rx_utxo->utxo_id, sizeof(rx_utxo->utxo_id), "TX-TRANSFER-%ld", (long)time(NULL));
+    snprintf(rx_utxo->owner_id, sizeof(rx_utxo->owner_id), "%s", recipient_id);
     rx_utxo->amount = amount;
     rx_utxo->is_spent = 0;
     rx_utxo->next = utxo_head;
@@ -180,13 +187,15 @@ int process_utxo_transfer(const char* sender_id, const char* recipient_id, int a
     int change = gathered - required;
     if (change > 0) {
         UTXO* change_utxo = (UTXO*)malloc(sizeof(UTXO));
-        sprintf(change_utxo->utxo_id, "TX-CHANGE-%ld", (long)time(NULL));
-        strcpy(change_utxo->owner_id, sender_id);
-        change_utxo->amount = change;
-        change_utxo->is_spent = 0;
-        change_utxo->next = utxo_head;
-        utxo_head = change_utxo;
-        printf("UTXO SYSTEM: Generated change output of %d Coins back to %s\n", change, sender_id);
+        if (change_utxo != NULL) {
+            snprintf(change_utxo->utxo_id, sizeof(change_utxo->utxo_id), "TX-CHANGE-%ld", (long)time(NULL));
+            snprintf(change_utxo->owner_id, sizeof(change_utxo->owner_id), "%s", sender_id);
+            change_utxo->amount = change;
+            change_utxo->is_spent = 0;
+            change_utxo->next = utxo_head;
+            utxo_head = change_utxo;
+            printf("[UTXO SYSTEM]: Generated change output of %d Coins back to %s\n", change, sender_id);
+        }
     }
     return 1;
 }
@@ -201,14 +210,15 @@ int process_account_transfer(const char* sender_id, const char* recipient_id, in
 
     if(s_idx == -1 || r_idx == -1) return 0;
     if(submitted_nonce != student_registry[s_idx].nonce) return 0; 
-    if(student_registry[s_idx].balance < (amount + fee)) return 0;
+    if(student_registry[s_idx].balance < (amount + fee)) return 0; 
 
     student_registry[s_idx].balance -= (amount + fee);
     student_registry[r_idx].balance += amount;
 
     TxLogNode* node = (TxLogNode*)malloc(sizeof(TxLogNode));
-    strcpy(node->sender, sender_id);
-    strcpy(node->recipient, recipient_id);
+    if (node == NULL) return 0;
+    snprintf(node->sender, sizeof(node->sender), "%s", sender_id);
+    snprintf(node->recipient, sizeof(node->recipient), "%s", recipient_id);
     node->amount = amount;
     node->fee = fee;
     node->nonce = submitted_nonce;
@@ -266,7 +276,7 @@ void mine_solo(int difficulty) {
             attempts++;
             generate_block_hash(current_work, hash_res);
             if(strncmp(hash_res, target, difficulty) == 0) {
-                strcpy(current_work->hash, hash_res);
+                snprintf(current_work->hash, sizeof(current_work->hash), "%s", hash_res);
                 break;
             }
             current_work->nonce++;
@@ -333,7 +343,7 @@ void mine_cloud(int rounds) {
     }
 }
 
-// Print utility functions
+// Utility functions
 void print_pending_pool() {
     printf("\nUNMINED PENDING ATTENDANCE POOL POINTERS\n");
     Block* curr = pending_pool_head;
