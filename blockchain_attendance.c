@@ -14,7 +14,7 @@ void compute_mock_hash(const char* input, char* output) {
     while ((c = (unsigned char)*input++)) {
         hash = ((hash << 5) + hash) + c;
     }
-    sprintf(output, 65, "00000000000000000000000000000000000000000000000000000000%08lx", hash);
+    snprintf(output, 65, "00000000000000000000000000000000000000000000000000000000%08lx", hash);
 }
 
 void generate_tx_hash(int index, const char* student_id, int reward, char* output) {
